@@ -34,6 +34,10 @@ VERSION : 0.1
       i_Pronto : Bool;
       i_SensorOptico : Bool;      // sensor óptico da posição de limpeza
       i_EtapaRotina : Int;        // etapa da rotina (tabela no LEIA-ME)
+      i_MotorHabilitado : Bool;   // EN do driver do motor de passo
+      i_SentidoLeste : Bool;      // DIR: eixo girando para leste
+      i_Pulsando : Bool;          // PUL: eixo gerando pulsos
+      i_Reparado : Bool;          // botão Reparado
    END_VAR
 
    VAR_OUTPUT
@@ -110,6 +114,10 @@ BEGIN
 	"DB_Supervisorio".Status.Falha_Comm_PC := #falha;
 	"DB_Supervisorio".Status.Sensor_Optico := #i_SensorOptico;
 	"DB_Supervisorio".Status.Etapa_Rotina := #i_EtapaRotina;
+	"DB_Supervisorio".Status.Motor_Habilitado := #i_MotorHabilitado;
+	"DB_Supervisorio".Status.Sentido_Leste := #i_SentidoLeste;
+	"DB_Supervisorio".Status.Pulsando := #i_Pulsando;
+	"DB_Supervisorio".Status.Reparado := #i_Reparado;
 
 	// ---------- 4) Comandos do PC (pulsos) ----------
 	#o_CmdStart  := "DB_Supervisorio".Comandos.Cmd_Start  AND NOT #falha;

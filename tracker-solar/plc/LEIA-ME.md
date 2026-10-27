@@ -33,7 +33,8 @@
 | 22.0 a 22.7 | Em_Auto, Em_Movimento, Referenciado, Sensor_Home, Limpeza_Ativa, Escova_Ligada, Travado, Emergencia | Bool | CLP → PC |
 | 23.0 a 23.4 | Fim_Curso_Leste, Fim_Curso_Oeste, Pronto, Falha_Comm_PC, Sensor_Optico | Bool | CLP → PC |
 | 24.0 | Status.Etapa_Rotina | Int | CLP → PC |
-| 26 a 31 | Reserva | Byte[6] | — |
+| 26.0 a 26.3 | Motor_Habilitado (EN), Sentido_Leste (DIR), Pulsando (PUL), Reparado | Bool | CLP → PC |
+| 28 a 31 | Reserva | Byte[4] | — |
 | 32.0 | Comandos.Vivo_PC | Int | PC → CLP |
 | 34.0 | Comandos.Setpoint_Deg | Real | PC → CLP |
 | 38.0 | Comandos.Escova_Vel_Idx | Int | PC → CLP |

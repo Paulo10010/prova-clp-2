@@ -26,6 +26,10 @@ const LEDS: { k: keyof Flags; rotulo: string; tipo: 'ok' | 'info' | 'alarme' }[]
   { k: 'fimCursoLeste', rotulo: 'Sensor FC leste', tipo: 'info' },
   { k: 'fimCursoOeste', rotulo: 'Sensor FC oeste', tipo: 'info' },
   { k: 'sensorOptico', rotulo: 'Sensor óptico', tipo: 'info' },
+  { k: 'motorHabilitado', rotulo: 'Motor EN', tipo: 'ok' },
+  { k: 'pulsando', rotulo: 'PUL (pulsando)', tipo: 'info' },
+  { k: 'sentidoLeste', rotulo: 'DIR → leste', tipo: 'info' },
+  { k: 'reparado', rotulo: 'Reparado', tipo: 'info' },
   { k: 'falhaCommPC', rotulo: 'Falha comm. PC', tipo: 'alarme' },
 ];
 

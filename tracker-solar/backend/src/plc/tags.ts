@@ -39,7 +39,11 @@ export const TAGS_STATUS = {
   falhaCommPC:      a('X23.3'),
   sensorOptico:     a('X23.4'),
   etapaRotina:      a('INT24'),
-  // bytes 26..31 reservados para expansão
+  motorHabilitado:  a('X26.0'),
+  sentidoLeste:     a('X26.1'),
+  pulsando:         a('X26.2'),
+  reparado:         a('X26.3'),
+  // bytes 28..31 reservados para expansão
 } as const;
 
 /** Comandos: PC -> CLP (escrita). Os Cmd_* são pulsos: o PC escreve TRUE e o CLP zera. */

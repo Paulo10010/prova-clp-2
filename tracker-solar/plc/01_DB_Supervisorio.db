@@ -14,6 +14,7 @@
 //      Status.Codigo_Alarme  20.0         Modo_Auto 40.5, Usa_Setpoint_PC 40.6
 //      Status.Em_Auto        22.0 ... Status.Falha_Comm_PC 23.3
 //      Status.Sensor_Optico  23.4     Status.Etapa_Rotina     24.0
+//      Status.Motor_Habilitado 26.0 ... Status.Reparado 26.3
 // =====================================================================
 DATA_BLOCK "DB_Supervisorio"
 { S7_Optimized_Access := 'FALSE' }
@@ -42,7 +43,11 @@ NON_RETAIN
          Falha_Comm_PC : Bool;      // watchdog: PC parou de responder
          Sensor_Optico : Bool;      // confirma a posição de limpeza
          Etapa_Rotina : Int;        // 0 fora da rotina, 1..6 rotina, 7..8 intertravamento (ver LEIA-ME)
-         Reserva : Array[0..5] of Byte;  // bytes 26..31 para expansão
+         Motor_Habilitado : Bool;   // 26.0  EN do motor de passo
+         Sentido_Leste : Bool;      // 26.1  DIR: girando para leste
+         Pulsando : Bool;           // 26.2  PUL: eixo gerando pulsos
+         Reparado : Bool;           // 26.3  botão Reparado
+         Reserva : Array[0..3] of Byte;  // bytes 28..31 para expansão
       END_STRUCT;
       Comandos : Struct   // PC -> CLP (o PC escreve; Cmd_* são pulsos zerados pelo CLP)
          Vivo_PC : Int;             // heartbeat do PC

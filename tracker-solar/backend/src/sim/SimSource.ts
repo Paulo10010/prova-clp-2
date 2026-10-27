@@ -330,6 +330,10 @@ export class SimSource implements PlantSource {
       falhaCommPC: false,
       sensorOptico: this.sensorOptico(),
       etapaRotina: ETAPA[this.fase],
+      motorHabilitado: !this.emergencia,
+      sentidoLeste: this.vel < -1e-3,
+      pulsando: Math.abs(this.vel) > 1e-3,
+      reparado: false,
     };
   }
 }

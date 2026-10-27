@@ -31,13 +31,18 @@ BEGIN
 	// =================================================================
 	// PARTE A — ENTRADAS: estado da sua lógica / I/O  ->  supervisório
 	// =================================================================
-	#posEixo := 0.0;      // ex.: "Eixo_Tracker".ActualPosition   (Technology Object)
-	#velEixo := 0.0;      // ex.: "Eixo_Tracker".ActualVelocity
+	// Axis_1 está em unidade angular (graus). Position/Velocity existem em todas as
+	// versões de tecnologia; num eixo PTO sem encoder equivalem a ActualPosition.
+	#posEixo := "Axis_1".Position;
+	#velEixo := "Axis_1".Velocity;
 	#encoder := 0;        // ex.: %ID1000  (valor do HSC_1 — confira em Propriedades do HSC > Endereços)
 	#spAtual := 0.0;      // ex.: "M_Setpoint_Tracker"   (setpoint que sua lógica usa)
 	#escIdx := 0;         // ex.: "M_Indice_Multispeed"
 	#alarme := 0;         // ex.: "MW_Codigo_Alarme"  (0 = ok, 1 = emergência, 10 = vento/intertravado ...)
 	#etapa := 0;          // ex.: "MW_Etapa_Rotina"   (0..8, tabela no LEIA-ME)
+	IF "Axis_1".StatusBits.Error THEN
+	    #alarme := 30;    // falha no eixo
+	END_IF;
 
 	"IDB_Supervisorio"(
 	    i_PosEixoDeg      := #posEixo,
@@ -47,18 +52,25 @@ BEGIN
 	    i_EscovaVelIdx    := #escIdx,
 	    i_CodigoAlarme    := #alarme,
 	    i_EmAuto          := FALSE,   // ex.: "M_Modo_Auto"
-	    i_EmMovimento     := FALSE,   // ex.: NOT "Eixo_Tracker".StatusBits.StandStill
-	    i_Referenciado    := FALSE,   // ex.: "Eixo_Tracker".StatusBits.HomingDone
-	    i_SensorHome      := FALSE,   // ex.: %I0.? sensor de home (leste)
-	    i_LimpezaAtiva    := FALSE,   // ex.: "M_Limpeza_Ativa"
-	    i_EscovaLigada    := FALSE,   // ex.: saída que dá partida no CFW10
-	    i_Travado         := FALSE,   // ex.: "M_Intertravamento_Vento"
+	    i_EmMovimento     := "Mover_Direita" OR "Mover_Esquerda"    // %M10.0 / %M10.1
+	                         OR NOT "Axis_1".StatusBits.StandStill,
+	    i_Referenciado    := "Axis_1".StatusBits.HomingDone OR "Memória_Home",   // %M10.2
+	    i_SensorHome      := "Sensor_Indutivo_Leste (Home)",        // %I0.2
+	    i_LimpezaAtiva    := "Lavagem" OR "Trepidar",               // %M11.4 / %M11.0
+	    i_EscovaLigada    := "Gira/Para",                           // %Q0.4 (partida do inversor)
+	    i_Travado         := "Manutencao",                          // %M11.5
 	    i_Emergencia      := FALSE,   // ex.: NOT %I0.? (botão de emergência NF)
-	    i_FimCursoLeste   := FALSE,   // ex.: %I0.?  sensor indutivo leste
-	    i_FimCursoOeste   := FALSE,   // ex.: %I0.?  sensor indutivo oeste
+	    i_FimCursoLeste   := "Sensor_Indutivo_Leste (Home)",        // %I0.2
+	    i_FimCursoOeste   := "Sensor_Indutivo_Oeste",               // %I0.3
 	    i_Pronto          := FALSE,   // ex.: "M_Sistema_Pronto"
-	    i_SensorOptico    := FALSE,   // ex.: %I0.?  sensor óptico da posição de limpeza
-	    i_EtapaRotina     := #etapa
+	    i_SensorOptico    := "Sensor_Optico",                       // %I0.4
+	    i_EtapaRotina     := #etapa,
+	    // Motor de passo. PUL (%Q0.0) e DIR (%Q0.1) são gerados pelo hardware do PTO
+	    // e não passam pela imagem de processo, então vêm do estado do eixo.
+	    i_MotorHabilitado := "EN",                                  // %Q0.2
+	    i_SentidoLeste    := "Axis_1".Velocity < 0.0,               // DIR: negativo = leste
+	    i_Pulsando        := NOT "Axis_1".StatusBits.StandStill,    // PUL ativo
+	    i_Reparado        := "Reparado"                             // %I0.7
 	);
 
 	// =================================================================

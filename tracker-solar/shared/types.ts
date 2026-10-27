@@ -24,6 +24,10 @@ export interface Flags {
   pronto: boolean;
   falhaCommPC: boolean;    // watchdog do CLP não vê o PC
   sensorOptico: boolean;   // confirma a posição de limpeza
+  motorHabilitado: boolean; // EN do driver do motor de passo
+  sentidoLeste: boolean;   // DIR: eixo girando para leste
+  pulsando: boolean;       // PUL: eixo gerando pulsos
+  reparado: boolean;       // botão Reparado
 }
 
 export interface ComandosAtuais {
