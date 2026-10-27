@@ -1,0 +1,23 @@
+# Node
+node_modules/
+dist/
+
+# Segredos e logs
+.env
+*.log
+tracker-solar/backend/logs/
+
+# Arquivo zip (já extraído na pasta ao lado)
+*.zip
+
+# TIA Portal - arquivos temporários
+**/Prova 1/TMP/
+**/Prova 1/Logs/
+
+# LaTeX - arquivos auxiliares
+*.aux
+*.toc
+*.lol
+*.lot
+*.out
+*.synctex.gz

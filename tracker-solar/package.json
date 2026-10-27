@@ -1,0 +1,19 @@
+{
+  "name": "tracker-solar",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Supervisório + gêmeo digital 3D de um tracker solar com CLP S7-1200",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "build": "npm run build -w frontend",
+    "start": "npm run start -w backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

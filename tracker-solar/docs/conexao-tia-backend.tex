@@ -1,0 +1,559 @@
+% =====================================================================
+%  Guia de conexão TIA Portal / S7-1200 <-> backend do Tracker Solar
+%  Classe abnTeX2 (normas ABNT). Compilar com:  latexmk -pdf conexao-tia-backend.tex
+% =====================================================================
+\documentclass[12pt, oneside, a4paper, chapter=TITLE, section=TITLE, english, brazil]{abntex2}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{indentfirst}
+\usepackage{color}
+\usepackage{graphicx}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+
+% ---------------------------------------------------------------------
+% Listagens de código (acentos tratados por "literate")
+% ---------------------------------------------------------------------
+\definecolor{fundo}{RGB}{245,245,245}
+\definecolor{comentario}{RGB}{90,110,90}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{fundo},
+  commentstyle=\color{comentario}\itshape,
+  frame=single, framerule=0.3pt, rulecolor=\color{gray},
+  breaklines=true, columns=fullflexible, keepspaces=true,
+  showstringspaces=false, tabsize=2,
+  xleftmargin=2pt, xrightmargin=2pt,
+  literate=
+    {á}{{\'a}}1 {à}{{\`a}}1 {ã}{{\~a}}1 {â}{{\^a}}1
+    {é}{{\'e}}1 {ê}{{\^e}}1 {í}{{\'i}}1 {ó}{{\'o}}1
+    {õ}{{\~o}}1 {ô}{{\^o}}1 {ú}{{\'u}}1 {ç}{{\c c}}1
+    {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1
+    {Ú}{{\'U}}1 {Ç}{{\c C}}1 {Ã}{{\~A}}1 {°}{{$^\circ$}}1
+    {→}{{$\rightarrow$}}1 {←}{{$\leftarrow$}}1 {—}{{---}}1
+}
+\renewcommand{\lstlistingname}{Código}
+\renewcommand{\lstlistlistingname}{Lista de códigos}
+
+% ---------------------------------------------------------------------
+% Dados do trabalho  >>> PREENCHA <<<
+% ---------------------------------------------------------------------
+\titulo{Conexão entre o CLP S7-1200 (TIA Portal V17) e o backend do supervisório do Tracker Solar}
+\autor{NOME DO AUTOR}
+\local{Recife}
+\data{2026}
+\instituicao{%
+  NOME DA INSTITUIÇÃO
+  \par
+  NOME DO DEPARTAMENTO / CURSO}
+\tipotrabalho{Relatório técnico}
+\preambulo{Guia passo a passo para configurar o CLP Siemens S7-1200 (CPU 1214C DC/DC/DC) no TIA Portal V17 e conectá-lo ao backend Node.js do supervisório web com gêmeo digital do tracker solar, por comunicação S7 (PUT/GET).}
+
+\definecolor{blue}{RGB}{41,5,195}
+\makeatletter
+\hypersetup{
+  pdftitle={\@title}, pdfauthor={\@author},
+  pdfsubject={Conexão TIA Portal / S7-1200 com backend},
+  pdfkeywords={S7-1200}{TIA Portal}{PUT/GET}{nodes7}{supervisório},
+  colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue,
+  bookmarksdepth=4
+}
+\makeatother
+
+\setlength{\parindent}{1.3cm}
+\setlength{\parskip}{0.2cm}
+\setlength{\emergencystretch}{3em} % evita linhas estourando com nomes longos em \texttt
+\makeindex
+
+\begin{document}
+\selectlanguage{brazil}
+\frenchspacing
+
+% =====================================================================
+% ELEMENTOS PRÉ-TEXTUAIS
+% =====================================================================
+\imprimircapa
+\imprimirfolhaderosto
+
+\begin{resumo}
+Este documento descreve, passo a passo, como estabelecer a comunicação entre o controlador lógico programável (CLP) Siemens S7-1200, programado no TIA Portal V17, e o backend Node.js do supervisório do tracker solar. O backend lê ciclicamente o bloco de dados \texttt{DB\_Supervisorio} pelo protocolo S7 (ISO-on-TCP, porta 102), usando a biblioteca \texttt{nodes7}, calcula a posição do sol e escreve o setpoint de ângulo e os comandos de operação. São apresentados a preparação da rede, a importação e a configuração dos blocos no TIA Portal, a liberação do acesso PUT/GET, o mapeamento das entradas e saídas no bloco \texttt{FC\_Supervisorio\_IO}, a configuração do backend, a sequência de verificação em bancada e um roteiro de diagnóstico de falhas.
+
+\textbf{Palavras-chave}: S7-1200. TIA Portal. Comunicação PUT/GET. Supervisório. Tracker solar.
+\end{resumo}
+
+\pdfbookmark[0]{\listtablename}{lot}
+\listoftables*
+\cleardoublepage
+
+\pdfbookmark[0]{\lstlistlistingname}{lol}
+\lstlistoflistings
+\cleardoublepage
+
+\begin{siglas}
+  \item[CLP] Controlador Lógico Programável
+  \item[CPU] Unidade Central de Processamento
+  \item[DB] \textit{Data Block} (bloco de dados)
+  \item[FB] \textit{Function Block} (bloco de função)
+  \item[FC] \textit{Function} (função)
+  \item[HSC] \textit{High-Speed Counter} (contador rápido)
+  \item[IP] \textit{Internet Protocol}
+  \item[OB] \textit{Organization Block} (bloco de organização)
+  \item[PTO] \textit{Pulse Train Output} (saída de trem de pulsos)
+  \item[PUT/GET] Serviços de leitura e escrita remota do protocolo S7
+  \item[SCL] \textit{Structured Control Language}
+  \item[TO] \textit{Technology Object} (objeto tecnológico)
+\end{siglas}
+
+\pdfbookmark[0]{\contentsname}{toc}
+\tableofcontents*
+\cleardoublepage
+
+% =====================================================================
+% ELEMENTOS TEXTUAIS
+% =====================================================================
+\textual
+
+% ---------------------------------------------------------------------
+\chapter{Introdução}
+% ---------------------------------------------------------------------
+
+O supervisório do tracker solar é composto por três partes: o navegador, que exibe a cena 3D, os gráficos e os comandos; o backend em Node.js, que calcula a posição do sol, registra o histórico e conversa com o CLP; e o próprio CLP S7-1200, que executa a lógica da bancada (motor de passo via PTO, encoder via HSC e inversor CFW10 das escovas).
+
+O navegador \textbf{nunca} fala direto com o CLP. Toda a troca passa pelo backend, que a cada 200~ms lê a área \texttt{Status} do \texttt{DB\_Supervisorio} e escreve, quando necessário, a área \texttt{Comandos}. O fluxo está resumido no \autoref{cod:arquitetura}.
+
+\begin{lstlisting}[caption={Arquitetura da comunicação}, label={cod:arquitetura}]
+Navegador (React + 3D) ←WebSocket→ Backend Node ←S7 PUT/GET (porta 102)→ S7-1200 → bancada
+                                     cálculo do sol             DB_Supervisorio (DB10)
+                                     log CSV                    FB_Supervisorio + FC_Supervisorio_IO
+\end{lstlisting}
+
+O objetivo deste guia é levar o leitor desde o projeto do TIA Portal até o supervisório mostrando os dados reais da bancada, com o indicador \textbf{CLP} verde e o contador \textbf{Vida CLP} piscando.
+
+\section{Princípio de segurança}
+
+Todos os intertravamentos (emergência, fins de curso, travamento por divergência do encoder) permanecem \textbf{na lógica do CLP}. O supervisório apenas \emph{pede}: o CLP decide se executa. Se o backend parar de responder por 3~s, o próprio CLP detecta a falha (\emph{watchdog}) e bloqueia os comandos remotos, exceto o \texttt{Stop}.
+
+% ---------------------------------------------------------------------
+\chapter{Material necessário}
+% ---------------------------------------------------------------------
+
+\begin{table}[htbp]
+\centering
+\caption{Itens de hardware e software}
+\label{tab:material}
+\begin{tabular}{p{0.32\textwidth}p{0.58\textwidth}}
+\toprule
+\textbf{Item} & \textbf{Observação} \\
+\midrule
+CLP S7-1200 1214C DC/DC/DC & Firmware V4.x; interface PROFINET integrada \\
+TIA Portal V17 & STEP 7 Basic ou Professional \\
+PC com Windows & Mesmo PC que roda o backend \\
+Cabo Ethernet & Ligação direta PC--CLP ou por \emph{switch} \\
+Node.js 20 ou mais novo & \url{https://nodejs.org} \\
+Pasta do projeto & \texttt{tracker-solar/} (com \texttt{backend/}, \texttt{frontend/}, \texttt{plc/}) \\
+\bottomrule
+\end{tabular}
+\fonte{Elaborada pelo autor.}
+\end{table}
+
+Os arquivos do CLP estão na pasta \texttt{tracker-solar/plc/}, conforme a \autoref{tab:arquivos}.
+
+\begin{table}[htbp]
+\centering
+\caption{Arquivos-fonte do CLP}
+\label{tab:arquivos}
+\begin{tabular}{p{0.36\textwidth}p{0.36\textwidth}p{0.18\textwidth}}
+\toprule
+\textbf{Arquivo} & \textbf{Função} & \textbf{Editar?} \\
+\midrule
+\texttt{01\_DB\_Supervisorio.db} & Área de troca CLP--PC (não otimizada) & Só o número \\
+\texttt{02\_FB\_Supervisorio.scl} & Vida do CLP, \emph{watchdog}, pulsos de comando & Não \\
+\texttt{03\_IDB\_Supervisorio.db} & DB de instância do FB & Não \\
+\texttt{04\_FC\_Supervisorio\_IO.scl} & Ligação com as I/O e memórias da sua lógica & \textbf{Sim} \\
+\bottomrule
+\end{tabular}
+\fonte{Elaborada pelo autor.}
+\end{table}
+
+% ---------------------------------------------------------------------
+\chapter{Passo 1 --- Preparar a rede}
+% ---------------------------------------------------------------------
+
+O protocolo S7 não atravessa sub-redes sem roteador; por isso o PC e o CLP precisam estar \textbf{na mesma sub-rede}.
+
+\begin{enumerate}[label=\arabic*.]
+  \item No TIA Portal, abra a \textbf{Configuração de dispositivos} da CPU, selecione a \textbf{Interface PROFINET [X1]} e, em \textbf{Endereços Ethernet}, anote o IP do CLP (exemplo: \texttt{192.168.0.1}, máscara \texttt{255.255.255.0}).
+  \item No Windows, abra \textbf{Configurações > Rede e Internet > Ethernet > Editar atribuição de IP} (ou \texttt{ncpa.cpl}) e configure o adaptador ligado ao CLP com IP \textbf{fixo} na mesma faixa, diferente do CLP. Exemplo: \texttt{192.168.0.10}, máscara \texttt{255.255.255.0}, sem gateway.
+  \item Teste a ligação com o comando do \autoref{cod:ping}. As respostas devem chegar sem perda.
+\end{enumerate}
+
+\begin{lstlisting}[language=bash, caption={Teste de alcance do CLP}, label={cod:ping}]
+ping 192.168.0.1
+\end{lstlisting}
+
+\begin{enumerate}[label=\arabic*., resume]
+  \item Se o \texttt{ping} responder, mas a conexão S7 falhar mais tarde, verifique se o \emph{firewall} do Windows ou um antivírus bloqueia saídas para a \textbf{porta TCP 102}.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\chapter{Passo 2 --- Importar os blocos no TIA Portal}
+% ---------------------------------------------------------------------
+
+\begin{enumerate}[label=\arabic*.]
+  \item Abra o projeto da bancada no TIA Portal V17.
+  \item Na árvore do projeto, expanda a CPU e localize \textbf{Arquivos de origem externos}.
+  \item Clique em \textbf{Adicionar novo arquivo externo} e selecione os quatro arquivos da pasta \texttt{plc/}.
+  \item Clique com o botão direito em cada arquivo, \textbf{na ordem 01, 02, 03, 04}, e escolha \textbf{Gerar blocos a partir da origem}. A ordem importa: o FB usa o DB, o IDB usa o FB e o FC usa o IDB.
+  \item Confira se os blocos \texttt{DB\_Supervisorio}, \texttt{FB\_Supervisorio}, \texttt{IDB\_Supervisorio} e \texttt{FC\_Supervisorio\_IO} apareceram em \textbf{Blocos de programa}.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\chapter{Passo 3 --- Configurar o DB\_Supervisorio}
+% ---------------------------------------------------------------------
+
+O backend acessa o DB por \textbf{endereço absoluto} (byte e bit). Isso só funciona se o bloco for \textbf{não otimizado} e tiver um número fixo.
+
+\begin{enumerate}[label=\arabic*.]
+  \item Clique com o botão direito em \texttt{DB\_Supervisorio} > \textbf{Propriedades}.
+  \item Em \textbf{Geral > Número}, selecione \textbf{Manual} e defina \textbf{10}. Se usar outro número, altere \texttt{PLC\_DB} no arquivo \texttt{backend/.env} (\autoref{cap:backend}).
+  \item Em \textbf{Atributos}, confirme que \textbf{Acesso otimizado ao bloco} está \textbf{desmarcado}. O arquivo-fonte já define \texttt{S7\_Optimized\_Access := 'FALSE'}, mas vale conferir.
+  \item Compile o DB e abra-o. Ative a coluna \textbf{Offset} e confira cada endereço com a \autoref{tab:offsets}. Qualquer diferença faz o backend ler valores trocados.
+\end{enumerate}
+
+\begin{longtable}{p{0.12\textwidth}p{0.42\textwidth}p{0.12\textwidth}p{0.2\textwidth}}
+\caption[Mapa de endereços do DB\_Supervisorio]{Mapa de endereços do DB\_Supervisorio (deve bater com \texttt{backend/src/plc/tags.ts})}
+\label{tab:offsets} \\
+\toprule
+\textbf{Offset} & \textbf{Variável} & \textbf{Tipo} & \textbf{Sentido} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Offset} & \textbf{Variável} & \textbf{Tipo} & \textbf{Sentido} \\
+\midrule
+\endhead
+0.0 & Status.Vivo\_PLC & Int & CLP $\rightarrow$ PC \\
+2.0 & Status.Pos\_Eixo\_Deg & Real & CLP $\rightarrow$ PC \\
+6.0 & Status.Vel\_Eixo\_DegS & Real & CLP $\rightarrow$ PC \\
+10.0 & Status.Encoder\_Contagem & DInt & CLP $\rightarrow$ PC \\
+14.0 & Status.Setpoint\_Atual\_Deg & Real & CLP $\rightarrow$ PC \\
+18.0 & Status.Escova\_Vel\_Idx & Int & CLP $\rightarrow$ PC \\
+20.0 & Status.Codigo\_Alarme & Int & CLP $\rightarrow$ PC \\
+22.0--22.7 & Em\_Auto, Em\_Movimento, Referenciado, Sensor\_Home, Limpeza\_Ativa, Escova\_Ligada, Travado, Emergencia & Bool & CLP $\rightarrow$ PC \\
+23.0--23.4 & Fim\_Curso\_Leste, Fim\_Curso\_Oeste, Pronto, Falha\_Comm\_PC, Sensor\_Optico & Bool & CLP $\rightarrow$ PC \\
+24.0 & Status.Etapa\_Rotina & Int & CLP $\rightarrow$ PC \\
+26--31 & Reserva & Byte[6] & --- \\
+32.0 & Comandos.Vivo\_PC & Int & PC $\rightarrow$ CLP \\
+34.0 & Comandos.Setpoint\_Deg & Real & PC $\rightarrow$ CLP \\
+38.0 & Comandos.Escova\_Vel\_Idx & Int & PC $\rightarrow$ CLP \\
+40.0--40.4 & Cmd\_Start, Cmd\_Stop, Cmd\_Home, Cmd\_Limpar, Cmd\_Reset (pulsos) & Bool & PC $\rightarrow$ CLP \\
+40.5 & Modo\_Auto (nível) & Bool & PC $\rightarrow$ CLP \\
+40.6 & Usa\_Setpoint\_PC (nível) & Bool & PC $\rightarrow$ CLP \\
+\bottomrule
+\end{longtable}
+\vspace{-0.6cm}
+\begin{center}\small Fonte: Elaborada pelo autor.\end{center}
+
+% ---------------------------------------------------------------------
+\chapter{Passo 4 --- Liberar o acesso PUT/GET na CPU}
+% ---------------------------------------------------------------------
+
+A partir do firmware V4, o S7-1200 recusa por padrão leituras e escritas de parceiros remotos. Sem esta liberação a conexão TCP abre, mas toda leitura volta com erro.
+
+\begin{enumerate}[label=\arabic*.]
+  \item Abra a \textbf{Configuração de dispositivos} e selecione a CPU.
+  \item Em \textbf{Propriedades > Geral > Proteção e Segurança > Mecanismos de conexão}, marque \textbf{Permitir acesso com comunicação PUT/GET de parceiro remoto}.
+  \item Em \textbf{Proteção e Segurança > Nível de acesso}, mantenha \textbf{Acesso completo (sem proteção)} ou, se usar senha, um nível que permita leitura e escrita HMI. Um nível mais restritivo bloqueia a escrita dos comandos.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\chapter{Passo 5 --- Chamar o FC no OB1}
+% ---------------------------------------------------------------------
+
+O \texttt{FC\_Supervisorio\_IO} chama internamente o \texttt{FB\_Supervisorio}, que, a cada ciclo:
+
+\begin{enumerate}[label=\alph*)]
+  \item incrementa \texttt{Status.Vivo\_PLC} (o supervisório usa para saber que o CLP está rodando);
+  \item verifica se \texttt{Comandos.Vivo\_PC} mudou nos últimos 3~s; se não mudou, liga \texttt{Falha\_Comm\_PC} e gera o alarme 20;
+  \item copia o estado da sua lógica para \texttt{Status};
+  \item transforma cada \texttt{Cmd\_*} em um pulso de um ciclo e zera o bit no DB;
+  \item com falha de comunicação, bloqueia Start, Home, Limpar, Reset e o setpoint do PC (o Stop sempre passa).
+\end{enumerate}
+
+Abra o \texttt{Main [OB1]} e, \textbf{depois} da lógica do tracker, adicione a chamada do \autoref{cod:ob1}. Em LAD/FBD, arraste o \texttt{FC\_Supervisorio\_IO} para uma nova rede.
+
+\begin{lstlisting}[caption={Chamada no OB1 (SCL)}, label={cod:ob1}]
+"FC_Supervisorio_IO"();
+\end{lstlisting}
+
+Neste ponto o FC já compila com valores fixos (zeros). É recomendável carregar o CLP e testar a comunicação (\autoref{cap:teste}) \textbf{antes} de mapear todas as variáveis: assim, um problema de rede não se mistura com um problema de lógica.
+
+% ---------------------------------------------------------------------
+\chapter{Passo 6 --- Mapear as I/O no FC\_Supervisorio\_IO}
+% ---------------------------------------------------------------------
+
+\section{Parte A --- estado da lógica para o supervisório}
+
+Substitua cada valor fixo pela tag correspondente do seu programa. Os nomes do \autoref{cod:partea} são exemplos; use os que existirem no seu projeto.
+
+\begin{lstlisting}[caption={Parte A do FC\_Supervisorio\_IO (exemplo preenchido)}, label={cod:partea}]
+#posEixo := "Eixo_Tracker".ActualPosition;   // TO em graus
+#velEixo := "Eixo_Tracker".ActualVelocity;
+#encoder := %ID1000;                         // valor do HSC_1
+#spAtual := "M_Setpoint_Tracker";
+#escIdx  := "M_Indice_Multispeed";
+#alarme  := "MW_Codigo_Alarme";              // 0 = ok
+#etapa   := "MW_Etapa_Rotina";               // 0..8
+
+"IDB_Supervisorio"(
+    i_PosEixoDeg      := #posEixo,
+    ...
+    i_EmAuto          := "M_Modo_Auto",
+    i_EmMovimento     := NOT "Eixo_Tracker".StatusBits.StandStill,
+    i_Referenciado    := "Eixo_Tracker".StatusBits.HomingDone,
+    i_Emergencia      := NOT %I0.0,          // botão NF
+    i_FimCursoLeste   := %I0.1,
+    i_FimCursoOeste   := %I0.2,
+    i_SensorOptico    := %I0.3,
+    i_EtapaRotina     := #etapa
+);
+\end{lstlisting}
+
+Observações importantes:
+
+\begin{itemize}
+  \item \textbf{Endereço do HSC}: confira em \textbf{Propriedades do HSC > Endereços de E/S}. No S7-1200 o HSC\_1 costuma ficar em \texttt{\%ID1000}, mas o valor depende da configuração.
+  \item \textbf{Unidade do eixo}: configure o \emph{Technology Object} em \textbf{graus} (°) e com a convenção do projeto: \textbf{negativo = leste}, \textbf{0 = horizontal}, \textbf{positivo = oeste}. Se o seu estiver invertido, inverta o sinal aqui.
+  \item \textbf{Códigos de alarme} e \textbf{etapas da rotina} devem seguir as \autoref{tab:alarmes} e \autoref{tab:etapas}; caso contrário a tela mostra textos errados.
+\end{itemize}
+
+\section{Parte B --- comandos do supervisório para a lógica}
+
+Descomente as linhas da Parte B e ligue as saídas do FB às memórias que sua lógica já usa (\autoref{cod:parteb}). Os \texttt{o\_Cmd*} são pulsos de um ciclo: trate-os como um botão momentâneo, em paralelo com os botões físicos.
+
+\begin{lstlisting}[caption={Parte B do FC\_Supervisorio\_IO}, label={cod:parteb}]
+"M_Start_Remoto"     := "IDB_Supervisorio".o_CmdStart;
+"M_Stop_Remoto"      := "IDB_Supervisorio".o_CmdStop;
+"M_Home_Remoto"      := "IDB_Supervisorio".o_CmdHome;
+"M_Limpar_Remoto"    := "IDB_Supervisorio".o_CmdLimpar;
+"M_Reset_Remoto"     := "IDB_Supervisorio".o_CmdReset;
+"M_Modo_Auto_Remoto" := "IDB_Supervisorio".o_ModoAuto;
+
+IF "IDB_Supervisorio".o_UsaSetpointPC THEN
+    "M_Setpoint_Tracker" := "IDB_Supervisorio".o_SetpointDeg;
+END_IF;
+
+"M_Indice_Multispeed" := "IDB_Supervisorio".o_EscovaVelIdx;
+"Q_CFW10_DI_MS0"      := "IDB_Supervisorio".o_MS_Bit0;
+"Q_CFW10_DI_MS1"      := "IDB_Supervisorio".o_MS_Bit1;
+"Q_CFW10_DI_MS2"      := "IDB_Supervisorio".o_MS_Bit2;
+\end{lstlisting}
+
+O setpoint chega em graus e pode ser usado diretamente no parâmetro \texttt{Position} de um \texttt{MC\_MoveAbsolute}, desde que o TO esteja em graus.
+
+% ---------------------------------------------------------------------
+\chapter{Passo 7 --- Compilar e carregar o CLP}
+% ---------------------------------------------------------------------
+
+\begin{enumerate}[label=\arabic*.]
+  \item Selecione a CPU e use \textbf{Compilar > Hardware e software (somente alterações)}. Corrija eventuais erros.
+  \item Clique em \textbf{Carregar no dispositivo}. Na janela, escolha a interface de rede do PC ligada ao CLP e clique em \textbf{Iniciar pesquisa}.
+  \item Como a configuração de hardware mudou (PUT/GET), carregue \textbf{hardware e software}. Se o TIA pedir, permita colocar a CPU em STOP.
+  \item Ao final, coloque a CPU em \textbf{RUN}.
+  \item Fique \textbf{online}, abra o \texttt{DB\_Supervisorio} e clique em \textbf{Monitorar tudo}. O valor de \texttt{Status.Vivo\_PLC} deve estar mudando continuamente. Como o backend ainda não está rodando, \texttt{Falha\_Comm\_PC} deve estar \texttt{TRUE} e \texttt{Codigo\_Alarme} igual a 20: isso é o comportamento esperado.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\chapter{Passo 8 --- Configurar o backend}\label{cap:backend}
+% ---------------------------------------------------------------------
+
+\begin{enumerate}[label=\arabic*.]
+  \item Abra um terminal na pasta \texttt{tracker-solar} e instale as dependências (apenas na primeira vez), conforme o \autoref{cod:install}.
+\end{enumerate}
+
+\begin{lstlisting}[language=bash, caption={Instalação das dependências}, label={cod:install}]
+cd tracker-solar
+npm install
+\end{lstlisting}
+
+\begin{enumerate}[label=\arabic*., resume]
+  \item Se ainda não existir, crie o arquivo \texttt{backend/.env} a partir do modelo: \texttt{copy backend\textbackslash.env.example backend\textbackslash.env} (Windows).
+  \item Edite \texttt{backend/.env} conforme o \autoref{cod:env}.
+\end{enumerate}
+
+\begin{lstlisting}[caption={Configuração do backend/.env para o CLP real}, label={cod:env}]
+MODE=plc            # plc = CLP real; sim = simulador
+PLC_IP=192.168.0.1  # IP do CLP (Passo 1)
+PLC_RACK=0          # S7-1200: rack 0
+PLC_SLOT=1          # S7-1200: slot 1
+PLC_DB=10           # número do DB_Supervisorio (Passo 3)
+PLC_POLL_MS=200     # período de leitura (ms)
+PORT=8080           # porta do servidor WebSocket
+LOG_CSV=true        # grava backend/logs/tracker_AAAA-MM-DD.csv
+\end{lstlisting}
+
+\begin{enumerate}[label=\arabic*., resume]
+  \item Inicie o sistema com \texttt{npm run dev}. O terminal deve mostrar as linhas do \autoref{cod:log}.
+\end{enumerate}
+
+\begin{lstlisting}[caption={Saída esperada do backend}, label={cod:log}]
+  Tracker Solar — backend
+  Fonte de dados : CLP em 192.168.0.1 (DB10)
+  WebSocket      : ws://localhost:8080/ws
+[S7] Conectando em 192.168.0.1 (rack 0, slot 1, DB10)...
+[S7] Conectado.
+\end{lstlisting}
+
+\begin{enumerate}[label=\arabic*., resume]
+  \item Abra \url{http://localhost:5173} no navegador.
+\end{enumerate}
+
+Se a porta do backend for alterada, altere também a constante \texttt{BACKEND} em \texttt{frontend/vite.config.ts}.
+
+% ---------------------------------------------------------------------
+\chapter{Passo 9 --- Verificar a comunicação}\label{cap:teste}
+% ---------------------------------------------------------------------
+
+Faça as verificações na ordem da \autoref{tab:verificacao}. Só avance quando a anterior estiver correta.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.06\textwidth}>{\raggedright\arraybackslash}p{0.42\textwidth}>{\raggedright\arraybackslash}p{0.42\textwidth}}
+\caption{Roteiro de verificação} \label{tab:verificacao} \\
+\toprule
+\textbf{Nº} & \textbf{Verificação} & \textbf{Resultado esperado} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Nº} & \textbf{Verificação} & \textbf{Resultado esperado} \\
+\midrule
+\endhead
+1 & Barra superior da tela & Selo \textbf{CLP REAL}; \textbf{Servidor} online; \textbf{CLP} conectado (verde) \\
+2 & Indicador \textbf{Vida CLP} & Número mudando e LED verde \\
+3 & Indicador \textbf{Watchdog} & \textbf{ok}. No TIA, \texttt{Falha\_Comm\_PC = FALSE} e o alarme 20 some \\
+4 & No TIA, monitorar \texttt{Comandos.Vivo\_PC} & Valor incrementando cerca de 5 vezes por segundo \\
+5 & No TIA, monitorar \texttt{Comandos.Setpoint\_Deg} & Igual ao ``sol ideal'' da tela (com \textbf{Setpoint vem de: Sol calculado}) \\
+6 & Forçar uma entrada da Parte A (ex.: fim de curso leste) & LED correspondente acende no painel \textbf{Sinais} \\
+7 & Clicar em \textbf{Stop} na tela & \texttt{o\_CmdStop} pulsa por um ciclo; \texttt{Cmd\_Stop} volta a \texttt{FALSE} \\
+8 & Desligar o backend (Ctrl+C) & Após 3~s, \texttt{Falha\_Comm\_PC = TRUE} e alarme 20 no CLP \\
+9 & Religar o backend & Comunicação volta sozinha; níveis (Modo\_Auto, setpoint) são reenviados \\
+\bottomrule
+\end{longtable}
+\vspace{-0.6cm}
+\begin{center}\small Fonte: Elaborada pelo autor.\end{center}
+
+Para conferir os pulsos (item 7), observe \texttt{o\_CmdStop} no \texttt{IDB\_Supervisorio}: por durar só um ciclo, ele pode não aparecer no monitoramento. Uma forma prática é usar um contador ou um \texttt{SET} em uma memória de teste ligada ao pulso.
+
+Só depois desses testes execute os comandos que movem a bancada (\textbf{Home}, \textbf{Start}, \textbf{Limpar}), com alguém próximo ao botão de emergência.
+
+% ---------------------------------------------------------------------
+\chapter{Tabelas de referência}
+% ---------------------------------------------------------------------
+
+\begin{table}[htbp]
+\centering
+\caption{Códigos de alarme reconhecidos pela tela}
+\label{tab:alarmes}
+\begin{tabular}{p{0.1\textwidth}p{0.75\textwidth}}
+\toprule
+\textbf{Código} & \textbf{Significado} \\
+\midrule
+0 & Sem alarme \\
+1 & Emergência acionada \\
+2 & Fim de curso LESTE \\
+3 & Fim de curso OESTE \\
+10 & Vento: encoder divergiu do eixo, intertravamento em 0° (travado) \\
+11 & Sensor óptico não confirmou a posição de limpeza \\
+20 & CLP sem comunicação com o PC (gerado pelo próprio FB) \\
+30 & Falha no eixo (\emph{Technology Object}) \\
+\bottomrule
+\end{tabular}
+\fonte{Elaborada pelo autor, a partir de \texttt{backend/src/config.ts}.}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Valores de Status.Etapa\_Rotina}
+\label{tab:etapas}
+\begin{tabular}{p{0.1\textwidth}p{0.75\textwidth}}
+\toprule
+\textbf{Valor} & \textbf{Passo} \\
+\midrule
+0 & Fora da rotina (parado ou rastreando o sol) \\
+1 & Buscando o sensor indutivo LESTE (home) \\
+2 & Varredura até o sensor indutivo OESTE \\
+3 & Indo para a posição de limpeza (30°), aguardando o sensor óptico \\
+4 & Limpeza a 20~Hz, motor de passo trepidando em microstep \\
+5 & Limpeza a 60~Hz \\
+6 & Voltando ao home (posição de alvorada) \\
+7 & Intertravamento por vento: indo para 0° \\
+8 & Intertravado em 0°, aguardando RESET \\
+\bottomrule
+\end{tabular}
+\fonte{Elaborada pelo autor, a partir de \texttt{plc/LEIA-ME.md}.}
+\end{table}
+
+Para acrescentar ou renomear alarmes e etapas, edite \texttt{ALARMES} e \texttt{ETAPAS\_ROTINA} em \texttt{backend/src/config.ts}.
+
+% ---------------------------------------------------------------------
+\chapter{Diagnóstico de falhas}
+% ---------------------------------------------------------------------
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.3\textwidth}>{\raggedright\arraybackslash}p{0.28\textwidth}>{\raggedright\arraybackslash}p{0.32\textwidth}}
+\caption{Sintomas, causas prováveis e soluções} \label{tab:falhas} \\
+\toprule
+\textbf{Sintoma} & \textbf{Causa provável} & \textbf{Solução} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Sintoma} & \textbf{Causa provável} & \textbf{Solução} \\
+\midrule
+\endhead
+\texttt{[S7] Falha na conexão} repetindo a cada 3~s & IP errado, cabo, PC fora da sub-rede ou porta 102 bloqueada & Refazer o Passo 1; testar \texttt{ping}; liberar a porta 102 no \emph{firewall} \\
+Conecta, mas aparece \texttt{Leituras falhando --- reconectando} & PUT/GET desabilitado ou número do DB errado & Refazer o Passo 4; conferir \texttt{PLC\_DB} e o número do DB \\
+Valores trocados ou absurdos na tela & DB otimizado ou offsets diferentes & Desmarcar acesso otimizado; comparar offsets com a \autoref{tab:offsets} \\
+\textbf{Vida CLP} parado & CPU em STOP ou FC não chamado no OB1 & Colocar em RUN; conferir o Passo 5 \\
+\textbf{Watchdog} em falha com o backend rodando & Escrita bloqueada pelo nível de acesso & Ajustar o nível de acesso (Passo 4) \\
+Comandos não fazem nada & Parte B ainda comentada ou memórias não usadas na lógica & Concluir o Passo 6, Parte B \\
+Painel 3D gira para o lado errado & Convenção de sinal invertida & Inverter o sinal no FC ou \texttt{ENCODER.sentido} no \texttt{config.ts} \\
+Ângulo do encoder com escala errada & PPR, quadratura ou relação de transmissão & Ajustar \texttt{ENCODER} em \texttt{backend/src/config.ts} \\
+Tela mostra ``Sem conexão com o backend'' & Backend não iniciado ou porta diferente & Rodar \texttt{npm run dev}; conferir \texttt{PORT} e \texttt{vite.config.ts} \\
+\bottomrule
+\end{longtable}
+\vspace{-0.6cm}
+\begin{center}\small Fonte: Elaborada pelo autor.\end{center}
+
+% ---------------------------------------------------------------------
+\chapter{Considerações finais}
+% ---------------------------------------------------------------------
+
+Seguindo os passos deste guia, o CLP S7-1200 passa a trocar dados com o backend por meio de uma área fixa e não otimizada (\texttt{DB\_Supervisorio}), com verificação de vida nos dois sentidos. A separação entre o \texttt{FB\_Supervisorio}, que não precisa ser editado, e o \texttt{FC\_Supervisorio\_IO}, que concentra o mapeamento, permite testar primeiro a comunicação e depois a lógica, reduzindo o tempo de depuração em bancada.
+
+Recomenda-se manter os intertravamentos de segurança exclusivamente no CLP e restringir o acesso à rede da bancada, já que o servidor do supervisório não exige autenticação: qualquer equipamento na mesma rede consegue abrir a tela e enviar comandos.
+
+% =====================================================================
+% ELEMENTOS PÓS-TEXTUAIS
+% =====================================================================
+\postextual
+
+\begin{thebibliography}{9}
+
+\bibitem{siemens1200}
+SIEMENS AG. \textbf{S7-1200 Programmable controller}: system manual. Nürnberg: Siemens, 2022.
+
+\bibitem{siemenstia}
+SIEMENS AG. \textbf{STEP 7 Basic V17}: manual do sistema (ajuda on-line do TIA Portal). Nürnberg: Siemens, 2021.
+
+\bibitem{nodes7}
+PLCPEOPLE. \textbf{nodes7}: routine to communicate with Siemens S7 PLCs from Node.js. Disponível em: \url{https://github.com/plcpeople/nodeS7}. Acesso em: 27 out. 2026.
+
+\bibitem{weg}
+WEG. \textbf{Inversor de frequência CFW10}: manual do usuário. Jaraguá do Sul: WEG.
+
+\end{thebibliography}
+
+\end{document}

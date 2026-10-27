@@ -1,0 +1,144 @@
+// =====================================================================
+//  FB_Supervisorio  —  ponte entre sua lógica e o DB_Supervisorio
+// ---------------------------------------------------------------------
+//  O que ele faz a cada scan:
+//   1. Incrementa Status.Vivo_PLC (o PC usa para saber que o CLP está vivo)
+//   2. Watchdog: se Comandos.Vivo_PC parar de mudar por 3 s -> Falha_Comm_PC
+//   3. Copia as entradas (estado da sua lógica) para DB_Supervisorio.Status
+//   4. Converte os pulsos Cmd_* do PC em saídas de 1 scan e zera os bits
+//   5. Com falha de comunicação, bloqueia comandos e o setpoint do PC
+//
+//  Você NÃO precisa editar este bloco. Os vínculos com I/O e memórias
+//  ficam no FC_Supervisorio_IO (arquivo 04).
+// =====================================================================
+FUNCTION_BLOCK "FB_Supervisorio"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT
+      i_PosEixoDeg : Real;        // posição do eixo (graus)
+      i_VelEixoDegS : Real;       // velocidade do eixo (graus/s)
+      i_EncoderContagem : DInt;   // contagem do HSC
+      i_SetpointAtualDeg : Real;  // setpoint que sua lógica está usando
+      i_EscovaVelIdx : Int;       // índice multispeed aplicado ao CFW10
+      i_CodigoAlarme : Int;       // 0 = sem alarme
+      i_EmAuto : Bool;
+      i_EmMovimento : Bool;
+      i_Referenciado : Bool;
+      i_SensorHome : Bool;
+      i_LimpezaAtiva : Bool;
+      i_EscovaLigada : Bool;
+      i_Travado : Bool;
+      i_Emergencia : Bool;
+      i_FimCursoLeste : Bool;
+      i_FimCursoOeste : Bool;
+      i_Pronto : Bool;
+      i_SensorOptico : Bool;      // sensor óptico da posição de limpeza
+      i_EtapaRotina : Int;        // etapa da rotina (tabela no LEIA-ME)
+   END_VAR
+
+   VAR_OUTPUT
+      o_CmdStart : Bool;          // pulso de 1 scan
+      o_CmdStop : Bool;           // pulso de 1 scan
+      o_CmdHome : Bool;           // pulso de 1 scan
+      o_CmdLimpar : Bool;         // pulso de 1 scan
+      o_CmdReset : Bool;          // pulso de 1 scan
+      o_ModoAuto : Bool;          // nível
+      o_UsaSetpointPC : Bool;     // nível (FALSE se a comunicação cair)
+      o_SetpointDeg : Real;       // setpoint pedido pelo PC
+      o_EscovaVelIdx : Int;       // 0..7
+      o_MS_Bit0 : Bool;           // bits do índice, para as DIs de multispeed do CFW10
+      o_MS_Bit1 : Bool;
+      o_MS_Bit2 : Bool;
+      o_FalhaCommPC : Bool;
+   END_VAR
+
+   VAR
+      tWatchdog {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
+      vivoPlc : Int;
+      vivoPcAnterior : Int;
+   END_VAR
+
+   VAR_TEMP
+      idx : Int;
+      w : Word;
+      falha : Bool;
+   END_VAR
+
+   VAR CONSTANT
+      TEMPO_WATCHDOG : Time := T#3S;
+   END_VAR
+
+
+BEGIN
+	// ---------- 1) Vida do CLP ----------
+	IF #vivoPlc >= 32000 THEN
+	    #vivoPlc := 0;
+	ELSE
+	    #vivoPlc := #vivoPlc + 1;
+	END_IF;
+	"DB_Supervisorio".Status.Vivo_PLC := #vivoPlc;
+
+	// ---------- 2) Watchdog do PC ----------
+	#tWatchdog(IN := ("DB_Supervisorio".Comandos.Vivo_PC = #vivoPcAnterior),
+	           PT := #TEMPO_WATCHDOG);
+	#vivoPcAnterior := "DB_Supervisorio".Comandos.Vivo_PC;
+	#falha := #tWatchdog.Q;
+	#o_FalhaCommPC := #falha;
+
+	// ---------- 3) Estado -> DB ----------
+	"DB_Supervisorio".Status.Pos_Eixo_Deg := #i_PosEixoDeg;
+	"DB_Supervisorio".Status.Vel_Eixo_DegS := #i_VelEixoDegS;
+	"DB_Supervisorio".Status.Encoder_Contagem := #i_EncoderContagem;
+	"DB_Supervisorio".Status.Setpoint_Atual_Deg := #i_SetpointAtualDeg;
+	"DB_Supervisorio".Status.Escova_Vel_Idx := #i_EscovaVelIdx;
+	IF #i_CodigoAlarme = 0 AND #falha THEN
+	    "DB_Supervisorio".Status.Codigo_Alarme := 20;   // sem comunicação com o PC
+	ELSE
+	    "DB_Supervisorio".Status.Codigo_Alarme := #i_CodigoAlarme;
+	END_IF;
+	"DB_Supervisorio".Status.Em_Auto := #i_EmAuto;
+	"DB_Supervisorio".Status.Em_Movimento := #i_EmMovimento;
+	"DB_Supervisorio".Status.Referenciado := #i_Referenciado;
+	"DB_Supervisorio".Status.Sensor_Home := #i_SensorHome;
+	"DB_Supervisorio".Status.Limpeza_Ativa := #i_LimpezaAtiva;
+	"DB_Supervisorio".Status.Escova_Ligada := #i_EscovaLigada;
+	"DB_Supervisorio".Status.Travado := #i_Travado;
+	"DB_Supervisorio".Status.Emergencia := #i_Emergencia;
+	"DB_Supervisorio".Status.Fim_Curso_Leste := #i_FimCursoLeste;
+	"DB_Supervisorio".Status.Fim_Curso_Oeste := #i_FimCursoOeste;
+	"DB_Supervisorio".Status.Pronto := #i_Pronto;
+	"DB_Supervisorio".Status.Falha_Comm_PC := #falha;
+	"DB_Supervisorio".Status.Sensor_Optico := #i_SensorOptico;
+	"DB_Supervisorio".Status.Etapa_Rotina := #i_EtapaRotina;
+
+	// ---------- 4) Comandos do PC (pulsos) ----------
+	#o_CmdStart  := "DB_Supervisorio".Comandos.Cmd_Start  AND NOT #falha;
+	#o_CmdStop   := "DB_Supervisorio".Comandos.Cmd_Stop;            // Stop passa mesmo com falha
+	#o_CmdHome   := "DB_Supervisorio".Comandos.Cmd_Home   AND NOT #falha;
+	#o_CmdLimpar := "DB_Supervisorio".Comandos.Cmd_Limpar AND NOT #falha;
+	#o_CmdReset  := "DB_Supervisorio".Comandos.Cmd_Reset  AND NOT #falha;
+
+	"DB_Supervisorio".Comandos.Cmd_Start := FALSE;
+	"DB_Supervisorio".Comandos.Cmd_Stop := FALSE;
+	"DB_Supervisorio".Comandos.Cmd_Home := FALSE;
+	"DB_Supervisorio".Comandos.Cmd_Limpar := FALSE;
+	"DB_Supervisorio".Comandos.Cmd_Reset := FALSE;
+
+	// ---------- 5) Comandos de nível ----------
+	#o_ModoAuto := "DB_Supervisorio".Comandos.Modo_Auto;
+	#o_UsaSetpointPC := "DB_Supervisorio".Comandos.Usa_Setpoint_PC AND NOT #falha;
+	#o_SetpointDeg := "DB_Supervisorio".Comandos.Setpoint_Deg;
+
+	#idx := "DB_Supervisorio".Comandos.Escova_Vel_Idx;
+	IF #idx < 0 THEN
+	    #idx := 0;
+	ELSIF #idx > 7 THEN
+	    #idx := 7;
+	END_IF;
+	#o_EscovaVelIdx := #idx;
+	#w := INT_TO_WORD(#idx);
+	#o_MS_Bit0 := #w.%X0;
+	#o_MS_Bit1 := #w.%X1;
+	#o_MS_Bit2 := #w.%X2;
+
+END_FUNCTION_BLOCK

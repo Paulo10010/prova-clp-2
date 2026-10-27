@@ -1,0 +1,86 @@
+// =====================================================================
+//  FC_Supervisorio_IO  —  >>> ÚNICO BLOCO QUE VOCÊ PRECISA PREENCHER <<<
+// ---------------------------------------------------------------------
+//  Chame este FC no Main (OB1), depois da sua lógica do tracker:
+//      "FC_Supervisorio_IO"();
+//
+//  PARTE A: troque cada valor fixo (0.0, 0, FALSE) pela tag/memória
+//           correspondente da sua lógica. Os comentários "ex.:" são
+//           sugestões; use os nomes que existirem no seu projeto.
+//  PARTE B: descomente as linhas e ligue as saídas nas memórias que
+//           sua lógica já usa para Start, Stop, Home etc.
+//
+//  Ele compila do jeito que está (com valores fixos), então dá para
+//  testar a comunicação com o PC antes de mapear tudo.
+// =====================================================================
+FUNCTION "FC_Supervisorio_IO" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_TEMP
+      posEixo : Real;
+      velEixo : Real;
+      encoder : DInt;
+      spAtual : Real;
+      escIdx : Int;
+      alarme : Int;
+      etapa : Int;
+   END_VAR
+
+
+BEGIN
+	// =================================================================
+	// PARTE A — ENTRADAS: estado da sua lógica / I/O  ->  supervisório
+	// =================================================================
+	#posEixo := 0.0;      // ex.: "Eixo_Tracker".ActualPosition   (Technology Object)
+	#velEixo := 0.0;      // ex.: "Eixo_Tracker".ActualVelocity
+	#encoder := 0;        // ex.: %ID1000  (valor do HSC_1 — confira em Propriedades do HSC > Endereços)
+	#spAtual := 0.0;      // ex.: "M_Setpoint_Tracker"   (setpoint que sua lógica usa)
+	#escIdx := 0;         // ex.: "M_Indice_Multispeed"
+	#alarme := 0;         // ex.: "MW_Codigo_Alarme"  (0 = ok, 1 = emergência, 10 = vento/intertravado ...)
+	#etapa := 0;          // ex.: "MW_Etapa_Rotina"   (0..8, tabela no LEIA-ME)
+
+	"IDB_Supervisorio"(
+	    i_PosEixoDeg      := #posEixo,
+	    i_VelEixoDegS     := #velEixo,
+	    i_EncoderContagem := #encoder,
+	    i_SetpointAtualDeg:= #spAtual,
+	    i_EscovaVelIdx    := #escIdx,
+	    i_CodigoAlarme    := #alarme,
+	    i_EmAuto          := FALSE,   // ex.: "M_Modo_Auto"
+	    i_EmMovimento     := FALSE,   // ex.: NOT "Eixo_Tracker".StatusBits.StandStill
+	    i_Referenciado    := FALSE,   // ex.: "Eixo_Tracker".StatusBits.HomingDone
+	    i_SensorHome      := FALSE,   // ex.: %I0.? sensor de home (leste)
+	    i_LimpezaAtiva    := FALSE,   // ex.: "M_Limpeza_Ativa"
+	    i_EscovaLigada    := FALSE,   // ex.: saída que dá partida no CFW10
+	    i_Travado         := FALSE,   // ex.: "M_Intertravamento_Vento"
+	    i_Emergencia      := FALSE,   // ex.: NOT %I0.? (botão de emergência NF)
+	    i_FimCursoLeste   := FALSE,   // ex.: %I0.?  sensor indutivo leste
+	    i_FimCursoOeste   := FALSE,   // ex.: %I0.?  sensor indutivo oeste
+	    i_Pronto          := FALSE,   // ex.: "M_Sistema_Pronto"
+	    i_SensorOptico    := FALSE,   // ex.: %I0.?  sensor óptico da posição de limpeza
+	    i_EtapaRotina     := #etapa
+	);
+
+	// =================================================================
+	// PARTE B — SAÍDAS: comandos do supervisório  ->  sua lógica
+	// (Cmd são pulsos de 1 scan; use-os como você usaria um botão)
+	// =================================================================
+	// "M_Start_Remoto"        := "IDB_Supervisorio".o_CmdStart;
+	// "M_Stop_Remoto"         := "IDB_Supervisorio".o_CmdStop;
+	// "M_Home_Remoto"         := "IDB_Supervisorio".o_CmdHome;
+	// "M_Limpar_Remoto"       := "IDB_Supervisorio".o_CmdLimpar;
+	// "M_Reset_Remoto"        := "IDB_Supervisorio".o_CmdReset;
+	// "M_Modo_Auto_Remoto"    := "IDB_Supervisorio".o_ModoAuto;
+	//
+	// Setpoint de ângulo calculado pelo PC (posição do sol ou manual):
+	// IF "IDB_Supervisorio".o_UsaSetpointPC THEN
+	//     "M_Setpoint_Tracker" := "IDB_Supervisorio".o_SetpointDeg;
+	// END_IF;
+	//
+	// Velocidade das escovas (multispeed do CFW10):
+	// "M_Indice_Multispeed"   := "IDB_Supervisorio".o_EscovaVelIdx;
+	// "Q_CFW10_DI_MS0"        := "IDB_Supervisorio".o_MS_Bit0;   // ex.: %Q0.?
+	// "Q_CFW10_DI_MS1"        := "IDB_Supervisorio".o_MS_Bit1;   // ex.: %Q0.?
+	// "Q_CFW10_DI_MS2"        := "IDB_Supervisorio".o_MS_Bit2;   // ex.: %Q0.?
+
+END_FUNCTION

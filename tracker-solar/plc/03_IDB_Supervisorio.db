@@ -1,0 +1,10 @@
+// DB de instância do FB_Supervisorio (gerado a partir da fonte; não precisa editar)
+DATA_BLOCK "IDB_Supervisorio"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+"FB_Supervisorio"
+
+BEGIN
+
+END_DATA_BLOCK

@@ -1,0 +1,63 @@
+// =====================================================================
+//  DB_Supervisorio  —  área de troca CLP <-> PC (supervisório web)
+// ---------------------------------------------------------------------
+//  * NÃO OTIMIZADO (S7_Optimized_Access = FALSE): o PC acessa por offset.
+//  * Depois de gerar o bloco, abra Propriedades > Geral e defina o
+//    NÚMERO = 10 (ou mude PLC_DB no backend/.env).
+//  * Compile e confira a coluna "Offset" com backend/src/plc/tags.ts:
+//      Status.Vivo_PLC        0.0     Comandos.Vivo_PC        32.0
+//      Status.Pos_Eixo_Deg    2.0     Comandos.Setpoint_Deg   34.0
+//      Status.Vel_Eixo_DegS   6.0     Comandos.Escova_Vel_Idx 38.0
+//      Status.Encoder_Contagem 10.0   Comandos.Cmd_Start      40.0
+//      Status.Setpoint_Atual 14.0     ... Cmd_Stop 40.1, Cmd_Home 40.2,
+//      Status.Escova_Vel_Idx 18.0         Cmd_Limpar 40.3, Cmd_Reset 40.4,
+//      Status.Codigo_Alarme  20.0         Modo_Auto 40.5, Usa_Setpoint_PC 40.6
+//      Status.Em_Auto        22.0 ... Status.Falha_Comm_PC 23.3
+//      Status.Sensor_Optico  23.4     Status.Etapa_Rotina     24.0
+// =====================================================================
+DATA_BLOCK "DB_Supervisorio"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT
+      Status : Struct   // CLP -> PC (o PC só lê)
+         Vivo_PLC : Int;            // contador incrementado a cada scan
+         Pos_Eixo_Deg : Real;       // posição do eixo (TO) em graus
+         Vel_Eixo_DegS : Real;      // velocidade do eixo em graus/s
+         Encoder_Contagem : DInt;   // valor do HSC do encoder
+         Setpoint_Atual_Deg : Real; // setpoint em uso pela lógica
+         Escova_Vel_Idx : Int;      // índice multispeed em uso (0..7)
+         Codigo_Alarme : Int;       // 0 = ok (tabela em backend/src/config.ts)
+         Em_Auto : Bool;
+         Em_Movimento : Bool;
+         Referenciado : Bool;       // homing concluído
+         Sensor_Home : Bool;
+         Limpeza_Ativa : Bool;
+         Escova_Ligada : Bool;
+         Travado : Bool;            // intertravamento por vento (encoder divergiu do eixo)
+         Emergencia : Bool;
+         Fim_Curso_Leste : Bool;
+         Fim_Curso_Oeste : Bool;
+         Pronto : Bool;
+         Falha_Comm_PC : Bool;      // watchdog: PC parou de responder
+         Sensor_Optico : Bool;      // confirma a posição de limpeza
+         Etapa_Rotina : Int;        // 0 fora da rotina, 1..6 rotina, 7..8 intertravamento (ver LEIA-ME)
+         Reserva : Array[0..5] of Byte;  // bytes 26..31 para expansão
+      END_STRUCT;
+      Comandos : Struct   // PC -> CLP (o PC escreve; Cmd_* são pulsos zerados pelo CLP)
+         Vivo_PC : Int;             // heartbeat do PC
+         Setpoint_Deg : Real;       // ângulo pedido pelo PC (sol ou manual)
+         Escova_Vel_Idx : Int;      // índice multispeed pedido (0..7)
+         Cmd_Start : Bool;
+         Cmd_Stop : Bool;
+         Cmd_Home : Bool;
+         Cmd_Limpar : Bool;
+         Cmd_Reset : Bool;
+         Modo_Auto : Bool;          // nível
+         Usa_Setpoint_PC : Bool;    // nível: TRUE = seguir Setpoint_Deg
+      END_STRUCT;
+   END_STRUCT;
+
+BEGIN
+
+END_DATA_BLOCK
