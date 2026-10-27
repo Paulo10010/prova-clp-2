@@ -21,3 +21,6 @@ tracker-solar/backend/logs/
 *.lot
 *.out
 *.synctex.gz
+
+# Documentação
+tracker-solar/docs/
